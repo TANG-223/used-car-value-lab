@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Used Car Price Estimator (US) — Linear / Cubic</title>
+  <style>
+    :root { --border:#e5e7eb; --muted:#6b7280; --bg:#fafafa; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; background: var(--bg); }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    h1 { margin: 0 0 10px; font-size: 22px; }
+    .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; }
+    .card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    label { display:block; font-size: 13px; color:#111827; margin-top: 10px; }
+    input, select { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; background:#fff; }
+    .muted { color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .pill { display:inline-flex; gap:8px; align-items:center; padding: 6px 10px; border:1px solid var(--border); border-radius:999px; font-size: 12px; background:#fff; }
+    .actions { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    button { padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: #111827; color:#fff; cursor:pointer; }
+    button.secondary { background:#fff; color:#111827; }
+    .result { display:grid; gap: 10px; }
+    .big { font-size: 26px; font-weight: 700; }
+    table { width:100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--border); text-align: left; padding: 8px 6px; vertical-align: top; }
+    th { color:#111827; font-weight:600; background:#fff; position: sticky; top: 0; }
+    .right { text-align:right; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .warn { color:#b45309; }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <h1>Used Car Price Estimator (US) — Linear / Cubic (Single-File)</h1>
+  <div class="muted">
+    This page does <b>no training</b>. You enter coefficients (β) and the page computes a price and a contribution breakdown.
+    Great for demos, teaching, and verifying coefficient logic.
+  </div>
+
+  <div class="actions" style="margin:12px 0 16px;">
+    <span class="pill"><b>Mode</b>
+      <select id="mode" style="width:auto; padding:6px 10px;">
+        <option value="linear" selected>Linear model (multiple features)</option>
+        <option value="cubic">Cubic model (single x)</option>
+      </select>
+    </span>
+    <button class="secondary" id="loadDemo">Load demo coefficients</button>
+    <button class="secondary" id="resetAll">Reset</button>
+    <button class="secondary" id="exportJson">Export JSON</button>
+    <button class="secondary" id="importJson">Import JSON</button>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT: Inputs & Coefficients -->
+    <div class="card">
+      <h3 style="margin:0 0 8px;">Inputs</h3>
+
+      <div id="linearInputs">
+        <div class="row">
+          <div>
+            <label>Age (years)</label>
+            <input id="age" type="number" step="0.1" min="0" value="3" />
+            <div class="muted">Typical: 0–15</div>
+          </div>
+          <div>
+            <label>Mileage (miles)</label>
+            <input id="mileage" type="number" step="1" min="0" value="45000" />
+            <div class="muted">We also compute mileage_10k = mileage / 10,000</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Accident</label>
+            <select id="accident">
+              <option value="0" selected>No</option>
+              <option value="1">Yes</option>
+            </select>
+            <div class="muted">Binary factor (0/1)</div>
+          </div>
+          <div>
+            <label>Condition (1–5)</label>
+            <input id="condition" type="number" step="1" min="1" max="5" value="4" />
+            <div class="muted">Subjective score (demo variable)</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Brand premium ($)</label>
+            <input id="brandPremium" type="number" step="1" value="800" />
+            <div class="muted">Example: Toyota +800, BMW +2500…</div>
+          </div>
+          <div>
+            <label>Trim premium ($)</label>
+            <input id="trimPremium" type="number" step="1" value="600" />
+            <div class="muted">Example: higher trim packages</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="cubicInputs" style="display:none;">
+        <div class="row">
+          <div>
+            <label>Choose x variable</label>
+            <select id="xChoice">
+              <option value="age" selected>Age (years)</option>
+              <option value="mileage_10k">Mileage (per 10k miles)</option>
+            </select>
+            <div class="muted">Cubic model uses only one x</div>
+          </div>
+          <div>
+            <label>x value</label>
+            <input id="xValue" type="number" step="0.1" value="3" />
+            <div class="muted">If x=mileage_10k, enter “miles / 10,000” (e.g. 4.5)</div>
+          </div>
+        </div>
+      </div>
+
+      <hr style="border:none; border-top:1px solid var(--border); margin: 14px 0;" />
+
+      <h3 style="margin:0 0 8px;">Coefficients (β)</h3>
+      <div class="muted">Units matter. In this template we use: age in years, mileage in 10k miles, price in USD.</div>
+
+      <div id="linearCoefs">
+        <div class="row">
+          <div>
+            <label>β0 intercept</label>
+            <input id="b0" type="number" step="1" value="22000" />
+          </div>
+          <div>
+            <label>β_age (per year)</label>
+            <input id="bAge" type="number" step="1" value="-1200" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>β_mileage_10k (per 10k miles)</label>
+            <input id="bMil10k" type="number" step="1" value="-550" />
+          </div>
+          <div>
+            <label>β_accident (0→1)</label>
+            <input id="bAcc" type="number" step="1" value="-1800" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>β_condition (per 1 point)</label>
+            <input id="bCond" type="number" step="1" value="700" />
+          </div>
+          <div>
+            <label>β_brandPremium (per $1)</label>
+            <input id="bBrand" type="number" step="0.01" value="1" />
+            <div class="muted">Set to 1 if you directly add brand premium dollars</div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>β_trimPremium (per $1)</label>
+            <input id="bTrim" type="number" step="0.01" value="1" />
+          </div>
+          <div>
+            <label>Clamp min price ($)</label>
+            <input id="minPrice" type="number" step="1" value="0" />
+          </div>
+        </div>
+      </div>
+
+      <div id="cubicCoefs" style="display:none;">
+        <div class="row">
+          <div>
+            <label>β0 intercept</label>
+            <input id="c0" type="number" step="1" value="22000" />
+          </div>
+          <div>
+            <label>β1 (x)</label>
+            <input id="c1" type="number" step="1" value="-3000" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>β2 (x²)</label>
+            <input id="c2" type="number" step="1" value="200" />
+          </div>
+          <div>
+            <label>β3 (x³)</label>
+            <input id="c3" type="number" step="1" value="-6" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Clamp min price ($)</label>
+            <input id="cMinPrice" type="number" step="1" value="0" />
+          </div>
+          <div>
+            <label class="warn">Tip</label>
+            <div class="muted warn">Cubic can overshoot wildly with noisy data. Use for demo/trend, not production pricing.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Result -->
+    <div class="card result">
+      <h3 style="margin:0;">Result</h3>
+      <div class="muted">Prediction updates instantly when you change inputs or coefficients.</div>
+
+      <div class="big" id="priceOut">$ —</div>
+      <div class="muted mono" id="formulaOut">—</div>
+
+      <h3 style="margin:10px 0 0;">Contribution breakdown</h3>
+      <div class="muted">How each term contributes to the final price.</div>
+
+      <div style="max-height: 360px; overflow:auto; border:1px solid var(--border); border-radius: 12px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Term</th>
+              <th class="right">Value</th>
+              <th class="right">Coef</th>
+              <th class="right">Contribution</th>
+            </tr>
+          </thead>
+          <tbody id="breakdownBody"></tbody>
+        </table>
+      </div>
+
+      <div class="muted" id="notes"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  function num(v) {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : 0;
+  }
+
+  function fmtMoney(x) {
+    const v = Math.round(x);
+    return v.toLocaleString("en-US");
+  }
+
+  function setModeUI(mode) {
+    const isLinear = mode === "linear";
+    $("linearInputs").style.display = isLinear ? "" : "none";
+    $("linearCoefs").style.display  = isLinear ? "" : "none";
+    $("cubicInputs").style.display  = isLinear ? "none" : "";
+    $("cubicCoefs").style.display   = isLinear ? "none" : "";
+    compute();
+  }
+
+  function linearPredict() {
+    const age = num($("age").value);
+    const mileage = num($("mileage").value);
+    const mileage_10k = mileage / 10000.0;
+    const accident = num($("accident").value);
+    const condition = num($("condition").value);
+    const brandPremium = num($("brandPremium").value);
+    const trimPremium = num($("trimPremium").value);
+
+    const b0 = num($("b0").value);
+    const bAge = num($("bAge").value);
+    const bMil10k = num($("bMil10k").value);
+    const bAcc = num($("bAcc").value);
+    const bCond = num($("bCond").value);
+    const bBrand = num($("bBrand").value);
+    const bTrim = num($("bTrim").value);
+    const minPrice = num($("minPrice").value);
+
+    const terms = [
+      { name: "intercept", value: 1, coef: b0 },
+      { name: "age_years", value: age, coef: bAge },
+      { name: "mileage_10k", value: mileage_10k, coef: bMil10k },
+      { name: "accident", value: accident, coef: bAcc },
+      { name: "condition", value: condition, coef: bCond },
+      { name: "brandPremium_$", value: brandPremium, coef: bBrand },
+      { name: "trimPremium_$", value: trimPremium, coef: bTrim },
+    ];
+
+    let price = 0;
+    for (const t of terms) price += t.value * t.coef;
+    price = Math.max(price, minPrice);
+
+    const formula = `Price = β0 + β_age·age + β_mileage·(mileage/10k) + β_acc·acc + β_cond·cond + β_brand·brandPremium + β_trim·trimPremium`;
+
+    const notes = `mileage_10k = ${mileage_10k.toFixed(3)} (from ${fmtMoney(mileage)} miles)`;
+
+    return { price, terms, formula, notes };
+  }
+
+  function cubicPredict() {
+    const xChoice = $("xChoice").value;
+    const x = num($("xValue").value);
+
+    const c0 = num($("c0").value);
+    const c1 = num($("c1").value);
+    const c2 = num($("c2").value);
+    const c3 = num($("c3").value);
+    const minPrice = num($("cMinPrice").value);
+
+    const terms = [
+      { name: "intercept", value: 1, coef: c0 },
+      { name: `${xChoice}: x`, value: x, coef: c1 },
+      { name: `${xChoice}: x^2`, value: x*x, coef: c2 },
+      { name: `${xChoice}: x^3`, value: x*x*x, coef: c3 },
+    ];
+
+    let price = 0;
+    for (const t of terms) price += t.value * t.coef;
+    price = Math.max(price, minPrice);
+
+    const formula = `Price = β0 + β1·x + β2·x² + β3·x³   (x = ${xChoice})`;
+    const notes = `Cubic models can overshoot for large x; keep x in a reasonable scale (e.g., mileage in 10k units).`;
+
+    return { price, terms, formula, notes };
+  }
+
+  function renderBreakdown(terms) {
+    const tbody = $("breakdownBody");
+    tbody.innerHTML = "";
+    for (const t of terms) {
+      const contrib = t.value * t.coef;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${t.name}</td>
+        <td class="right">${Number.isFinite(t.value) ? t.value.toFixed(3) : "—"}</td>
+        <td class="right">${Number.isFinite(t.coef) ? t.coef.toFixed(3) : "—"}</td>
+        <td class="right">${fmtMoney(contrib)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  function compute() {
+    const mode = $("mode").value;
+    const out = mode === "linear" ? linearPredict() : cubicPredict();
+
+    $("priceOut").textContent = "$ " + fmtMoney(out.price);
+    $("formulaOut").textContent = out.formula;
+    $("notes").textContent = out.notes;
+
+    renderBreakdown(out.terms);
+  }
+
+  function currentState() {
+    // Export/import everything needed to reproduce state
+    const ids = [
+      "mode",
+      "age","mileage","accident","condition","brandPremium","trimPremium",
+      "b0","bAge","bMil10k","bAcc","bCond","bBrand","bTrim","minPrice",
+      "xChoice","xValue",
+      "c0","c1","c2","c3","cMinPrice"
+    ];
+    const s = {};
+    for (const id of ids) {
+      const el = $(id);
+      if (el) s[id] = el.value;
+    }
+    return s;
+  }
+
+  function applyState(s) {
+    for (const [id, v] of Object.entries(s || {})) {
+      const el = $(id);
+      if (el) el.value = v;
+    }
+    setModeUI($("mode").value);
+    compute();
+  }
+
+  // events
+  $("mode").addEventListener("change", (e) => setModeUI(e.target.value));
+
+  document.addEventListener("input", (e) => {
+    // Any input updates the result
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) compute();
+  });
+
+  $("loadDemo").addEventListener("click", () => {
+    // A demo setup: feel free to tweak
+    applyState({
+      mode: "linear",
+      age: "4",
+      mileage: "52000",
+      accident: "0",
+      condition: "4",
+      brandPremium: "800",
+      trimPremium: "600",
+      b0: "24000",
+      bAge: "-1300",
+      bMil10k: "-600",
+      bAcc: "-2200",
+      bCond: "650",
+      bBrand: "1",
+      bTrim: "1",
+      minPrice: "0",
+      xChoice: "age",
+      xValue: "4",
+      c0: "24000",
+      c1: "-3500",
+      c2: "250",
+      c3: "-7",
+      cMinPrice: "0",
+    });
+  });
+
+  $("resetAll").addEventListener("click", () => {
+    location.reload();
+  });
+
+  $("exportJson").addEventListener("click", async () => {
+    const s = currentState();
+    const text = JSON.stringify(s, null, 2);
+    await navigator.clipboard.writeText(text);
+    alert("Exported state JSON to clipboard.");
+  });
+
+  $("importJson").addEventListener("click", () => {
+    const text = prompt("Paste state JSON here:");
+    if (!text) return;
+    try {
+      const s = JSON.parse(text);
+      applyState(s);
+    } catch (err) {
+      alert("Invalid JSON.");
+    }
+  });
+
+  // init
+  setModeUI($("mode").value);
+  compute();
+</script>
+</body>
+</html>
