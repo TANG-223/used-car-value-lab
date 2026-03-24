@@ -1,444 +1,316 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Used Car Price Estimator (US) — Linear / Cubic</title>
-  <style>
-    :root { --border:#e5e7eb; --muted:#6b7280; --bg:#fafafa; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; background: var(--bg); }
-    .wrap { max-width: 1100px; margin: 0 auto; }
-    h1 { margin: 0 0 10px; font-size: 22px; }
-    .grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 16px; }
-    .card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    label { display:block; font-size: 13px; color:#111827; margin-top: 10px; }
-    input, select { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; background:#fff; }
-    .muted { color: var(--muted); font-size: 12px; line-height: 1.4; }
-    .pill { display:inline-flex; gap:8px; align-items:center; padding: 6px 10px; border:1px solid var(--border); border-radius:999px; font-size: 12px; background:#fff; }
-    .actions { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-    button { padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: #111827; color:#fff; cursor:pointer; }
-    button.secondary { background:#fff; color:#111827; }
-    .result { display:grid; gap: 10px; }
-    .big { font-size: 26px; font-weight: 700; }
-    table { width:100%; border-collapse: collapse; font-size: 13px; }
-    th, td { border-bottom: 1px solid var(--border); text-align: left; padding: 8px 6px; vertical-align: top; }
-    th { color:#111827; font-weight:600; background:#fff; position: sticky; top: 0; }
-    .right { text-align:right; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
-    .warn { color:#b45309; }
-    @media (max-width: 980px) {
-      .grid { grid-template-columns: 1fr; }
-    }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Used Car Value Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-<div class="wrap">
-  <h1>Used Car Price Estimator (US) — Linear / Cubic (Single-File)</h1>
-  <div class="muted">
-    This page does <b>no training</b>. You enter coefficients (β) and the page computes a price and a contribution breakdown.
-    Great for demos, teaching, and verifying coefficient logic.
-  </div>
-
-  <div class="actions" style="margin:12px 0 16px;">
-    <span class="pill"><b>Mode</b>
-      <select id="mode" style="width:auto; padding:6px 10px;">
-        <option value="linear" selected>Linear model (multiple features)</option>
-        <option value="cubic">Cubic model (single x)</option>
-      </select>
-    </span>
-    <button class="secondary" id="loadDemo">Load demo coefficients</button>
-    <button class="secondary" id="resetAll">Reset</button>
-    <button class="secondary" id="exportJson">Export JSON</button>
-    <button class="secondary" id="importJson">Import JSON</button>
-  </div>
-
-  <div class="grid">
-    <!-- LEFT: Inputs & Coefficients -->
-    <div class="card">
-      <h3 style="margin:0 0 8px;">Inputs</h3>
-
-      <div id="linearInputs">
-        <div class="row">
-          <div>
-            <label>Age (years)</label>
-            <input id="age" type="number" step="0.1" min="0" value="3" />
-            <div class="muted">Typical: 0–15</div>
-          </div>
-          <div>
-            <label>Mileage (miles)</label>
-            <input id="mileage" type="number" step="1" min="0" value="45000" />
-            <div class="muted">We also compute mileage_10k = mileage / 10,000</div>
-          </div>
+  <header class="site-header">
+    <div class="container nav-wrap">
+      <a class="brand" href="#top">
+        <span class="brand-mark">U</span>
+        <div>
+          <div class="brand-title">Used Car Value Lab</div>
+          <div class="brand-sub" data-i18n="brandSub">Student-built estimator for the U.S. market</div>
         </div>
-
-        <div class="row">
-          <div>
-            <label>Accident</label>
-            <select id="accident">
-              <option value="0" selected>No</option>
-              <option value="1">Yes</option>
-            </select>
-            <div class="muted">Binary factor (0/1)</div>
-          </div>
-          <div>
-            <label>Condition (1–5)</label>
-            <input id="condition" type="number" step="1" min="1" max="5" value="4" />
-            <div class="muted">Subjective score (demo variable)</div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div>
-            <label>Brand premium ($)</label>
-            <input id="brandPremium" type="number" step="1" value="800" />
-            <div class="muted">Example: Toyota +800, BMW +2500…</div>
-          </div>
-          <div>
-            <label>Trim premium ($)</label>
-            <input id="trimPremium" type="number" step="1" value="600" />
-            <div class="muted">Example: higher trim packages</div>
-          </div>
-        </div>
-      </div>
-
-      <div id="cubicInputs" style="display:none;">
-        <div class="row">
-          <div>
-            <label>Choose x variable</label>
-            <select id="xChoice">
-              <option value="age" selected>Age (years)</option>
-              <option value="mileage_10k">Mileage (per 10k miles)</option>
-            </select>
-            <div class="muted">Cubic model uses only one x</div>
-          </div>
-          <div>
-            <label>x value</label>
-            <input id="xValue" type="number" step="0.1" value="3" />
-            <div class="muted">If x=mileage_10k, enter “miles / 10,000” (e.g. 4.5)</div>
-          </div>
-        </div>
-      </div>
-
-      <hr style="border:none; border-top:1px solid var(--border); margin: 14px 0;" />
-
-      <h3 style="margin:0 0 8px;">Coefficients (β)</h3>
-      <div class="muted">Units matter. In this template we use: age in years, mileage in 10k miles, price in USD.</div>
-
-      <div id="linearCoefs">
-        <div class="row">
-          <div>
-            <label>β0 intercept</label>
-            <input id="b0" type="number" step="1" value="22000" />
-          </div>
-          <div>
-            <label>β_age (per year)</label>
-            <input id="bAge" type="number" step="1" value="-1200" />
-          </div>
-        </div>
-
-        <div class="row">
-          <div>
-            <label>β_mileage_10k (per 10k miles)</label>
-            <input id="bMil10k" type="number" step="1" value="-550" />
-          </div>
-          <div>
-            <label>β_accident (0→1)</label>
-            <input id="bAcc" type="number" step="1" value="-1800" />
-          </div>
-        </div>
-
-        <div class="row">
-          <div>
-            <label>β_condition (per 1 point)</label>
-            <input id="bCond" type="number" step="1" value="700" />
-          </div>
-          <div>
-            <label>β_brandPremium (per $1)</label>
-            <input id="bBrand" type="number" step="0.01" value="1" />
-            <div class="muted">Set to 1 if you directly add brand premium dollars</div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div>
-            <label>β_trimPremium (per $1)</label>
-            <input id="bTrim" type="number" step="0.01" value="1" />
-          </div>
-          <div>
-            <label>Clamp min price ($)</label>
-            <input id="minPrice" type="number" step="1" value="0" />
-          </div>
-        </div>
-      </div>
-
-      <div id="cubicCoefs" style="display:none;">
-        <div class="row">
-          <div>
-            <label>β0 intercept</label>
-            <input id="c0" type="number" step="1" value="22000" />
-          </div>
-          <div>
-            <label>β1 (x)</label>
-            <input id="c1" type="number" step="1" value="-3000" />
-          </div>
-        </div>
-        <div class="row">
-          <div>
-            <label>β2 (x²)</label>
-            <input id="c2" type="number" step="1" value="200" />
-          </div>
-          <div>
-            <label>β3 (x³)</label>
-            <input id="c3" type="number" step="1" value="-6" />
-          </div>
-        </div>
-        <div class="row">
-          <div>
-            <label>Clamp min price ($)</label>
-            <input id="cMinPrice" type="number" step="1" value="0" />
-          </div>
-          <div>
-            <label class="warn">Tip</label>
-            <div class="muted warn">Cubic can overshoot wildly with noisy data. Use for demo/trend, not production pricing.</div>
-          </div>
-        </div>
+      </a>
+      <nav class="top-nav">
+        <a href="#estimator" data-i18n="navEstimator">Estimator</a>
+        <a href="#how-it-works" data-i18n="navHow">How It Works</a>
+        <a href="#market" data-i18n="navMarket">Learn the Market</a>
+        <a href="#about" data-i18n="navAbout">About</a>
+      </nav>
+      <div class="lang-switch" role="group" aria-label="Language switcher">
+        <button class="lang-btn active" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="zh">中文</button>
       </div>
     </div>
+  </header>
 
-    <!-- RIGHT: Result -->
-    <div class="card result">
-      <h3 style="margin:0;">Result</h3>
-      <div class="muted">Prediction updates instantly when you change inputs or coefficients.</div>
-
-      <div class="big" id="priceOut">$ —</div>
-      <div class="muted mono" id="formulaOut">—</div>
-
-      <h3 style="margin:10px 0 0;">Contribution breakdown</h3>
-      <div class="muted">How each term contributes to the final price.</div>
-
-      <div style="max-height: 360px; overflow:auto; border:1px solid var(--border); border-radius: 12px;">
-        <table>
-          <thead>
-            <tr>
-              <th>Term</th>
-              <th class="right">Value</th>
-              <th class="right">Coef</th>
-              <th class="right">Contribution</th>
-            </tr>
-          </thead>
-          <tbody id="breakdownBody"></tbody>
-        </table>
+  <main id="top">
+    <section class="hero section section-first">
+      <div class="container hero-grid">
+        <div>
+          <span class="eyebrow" data-i18n="heroEyebrow">Explainable · Lightweight · Educational</span>
+          <h1 data-i18n="heroTitle">Understand used-car prices more clearly</h1>
+          <p class="hero-copy" data-i18n="heroCopy">
+            This project connects a student-built regression model with a lightweight web tool. It helps users estimate used-car value and understand how age, mileage, condition, and premium factors shape the final result.
+          </p>
+          <div class="hero-actions">
+            <a href="#estimator" class="btn btn-primary" data-i18n="heroBtnPrimary">Start Estimating</a>
+            <a href="#how-it-works" class="btn btn-secondary" data-i18n="heroBtnSecondary">How It Works</a>
+          </div>
+          <div class="hero-note" data-i18n="heroNote">
+            Designed for project demos, student research, and general learning about the U.S. used-car market.
+          </div>
+        </div>
+        <div class="hero-card card">
+          <div class="mini-label" data-i18n="heroCardLabel">Quick snapshot</div>
+          <div class="stat-grid">
+            <div class="stat-item">
+              <div class="stat-number">4,345</div>
+              <div class="stat-text" data-i18n="heroStat1">rows in the original project dataset</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-number">2</div>
+              <div class="stat-text" data-i18n="heroStat2">model modes: linear and cubic</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-number">1</div>
+              <div class="stat-text" data-i18n="heroStat3">simple static site for easy GitHub Pages deployment</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-number">∞</div>
+              <div class="stat-text" data-i18n="heroStat4">better for explanation than a black-box estimate</div>
+            </div>
+          </div>
+        </div>
       </div>
+    </section>
 
-      <div class="muted" id="notes"></div>
+    <section class="section">
+      <div class="container">
+        <div class="section-head centered">
+          <span class="eyebrow" data-i18n="whyEyebrow">Why this tool</span>
+          <h2 data-i18n="whyTitle">A clearer way to explore used-car value</h2>
+          <p data-i18n="whyCopy">
+            Commercial valuation platforms are useful, but they often feel opaque. This site keeps the model simple and visible, making it easier to learn how major variables influence price.
+          </p>
+        </div>
+        <div class="feature-grid">
+          <article class="card feature-card">
+            <h3 data-i18n="feature1Title">Explainable</h3>
+            <p data-i18n="feature1Copy">See how each factor contributes to the estimate instead of getting only a final number.</p>
+          </article>
+          <article class="card feature-card">
+            <h3 data-i18n="feature2Title">Lightweight</h3>
+            <p data-i18n="feature2Copy">Built as a simple static site that is easy for a student project to maintain and present.</p>
+          </article>
+          <article class="card feature-card">
+            <h3 data-i18n="feature3Title">Educational</h3>
+            <p data-i18n="feature3Copy">Useful for demos, school presentations, science fairs, and learning about the U.S. market.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="estimator" class="section section-alt">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow" data-i18n="estimatorEyebrow">Estimator</span>
+          <h2 data-i18n="estimatorTitle">Estimate a vehicle value</h2>
+          <p data-i18n="estimatorCopy">Enter the vehicle information below to generate an educational value estimate and a contribution breakdown.</p>
+        </div>
+
+        <div class="preset-row card">
+          <div>
+            <div class="mini-label" data-i18n="presetLabel">Try an example</div>
+            <div class="preset-copy" data-i18n="presetCopy">Use a preset vehicle profile to see how the model responds.</div>
+          </div>
+          <div class="preset-buttons">
+            <button class="btn btn-small btn-secondary preset-btn" data-preset="economy" data-i18n="presetEconomy">Economy Sedan</button>
+            <button class="btn btn-small btn-secondary preset-btn" data-preset="family" data-i18n="presetFamily">Family SUV</button>
+            <button class="btn btn-small btn-secondary preset-btn" data-preset="premium" data-i18n="presetPremium">Premium Vehicle</button>
+          </div>
+        </div>
+
+        <div class="estimator-grid">
+          <div class="card form-card">
+            <div class="form-topbar">
+              <div>
+                <label class="field-label" for="mode" data-i18n="modeLabel">Model type</label>
+                <select id="mode">
+                  <option value="linear" data-i18n="modeLinear">Linear model</option>
+                  <option value="cubic" data-i18n="modeCubic">Cubic model</option>
+                </select>
+              </div>
+              <div class="form-actions-inline">
+                <button class="btn btn-small btn-secondary" id="loadDemoBtn" data-i18n="loadDemo">Load demo coefficients</button>
+                <button class="btn btn-small btn-secondary" id="resetBtn" data-i18n="resetBtn">Reset</button>
+              </div>
+            </div>
+
+            <div class="form-section-title" data-i18n="inputsTitle">Inputs</div>
+            <div class="form-grid linear-fields">
+              <label>
+                <span class="field-label" data-i18n="ageLabel">Vehicle age (years)</span>
+                <input type="number" id="age" min="0" step="1" value="5" />
+                <small data-i18n="ageHint">Typical: 0–15</small>
+              </label>
+              <label>
+                <span class="field-label" data-i18n="mileageLabel">Mileage (miles)</span>
+                <input type="number" id="mileage" min="0" step="1000" value="62000" />
+                <small data-i18n="mileageHint">The model also computes mileage per 10,000 miles.</small>
+              </label>
+              <label>
+                <span class="field-label" data-i18n="accidentLabel">Accident history</span>
+                <select id="accident">
+                  <option value="0" data-i18n="accidentNo">No</option>
+                  <option value="1" data-i18n="accidentYes">Yes</option>
+                </select>
+                <small data-i18n="accidentHint">Binary factor: 0 or 1</small>
+              </label>
+              <label>
+                <span class="field-label" data-i18n="conditionLabel">Condition (1–5)</span>
+                <input type="number" id="condition" min="1" max="5" step="1" value="4" />
+                <small data-i18n="conditionHint">A simplified condition score for demo purposes.</small>
+              </label>
+              <label>
+                <span class="field-label" data-i18n="brandLabel">Brand premium ($)</span>
+                <input type="number" id="brandPremium" step="100" value="800" />
+                <small data-i18n="brandHint">Example: Toyota +800, BMW +2500.</small>
+              </label>
+              <label>
+                <span class="field-label" data-i18n="trimLabel">Trim premium ($)</span>
+                <input type="number" id="trimPremium" step="100" value="600" />
+                <small data-i18n="trimHint">Higher trim packages can support a premium.</small>
+              </label>
+            </div>
+
+            <div class="form-grid cubic-fields hidden">
+              <label>
+                <span class="field-label" data-i18n="xTypeLabel">Choose x variable</span>
+                <select id="xType">
+                  <option value="age" data-i18n="xTypeAge">Age (years)</option>
+                  <option value="mileage_10k" data-i18n="xTypeMileage">Mileage (per 10k miles)</option>
+                </select>
+                <small data-i18n="xTypeHint">Cubic mode uses one variable only.</small>
+              </label>
+              <label>
+                <span class="field-label" data-i18n="xValueLabel">x value</span>
+                <input type="number" id="xValue" step="0.1" value="5" />
+                <small data-i18n="xValueHint">If x is mileage_10k, enter miles divided by 10,000.</small>
+              </label>
+            </div>
+
+            <div class="divider"></div>
+            <div class="coeff-header">
+              <div>
+                <div class="form-section-title" data-i18n="coefTitle">Coefficients</div>
+                <small data-i18n="coefHint">Units matter. In this template: age in years, mileage in 10k miles, price in USD.</small>
+              </div>
+              <div class="form-actions-inline">
+                <button class="btn btn-small btn-secondary" id="exportBtn" data-i18n="exportBtn">Export JSON</button>
+                <label class="btn btn-small btn-secondary upload-label" for="importFile" data-i18n="importBtn">Import JSON</label>
+                <input id="importFile" type="file" accept="application/json" hidden>
+              </div>
+            </div>
+
+            <div class="form-grid linear-coefs">
+              <label><span class="field-label">β0 intercept</span><input type="number" id="b0" step="100" value="23500"></label>
+              <label><span class="field-label">β_age</span><input type="number" id="bAge" step="10" value="-900"></label>
+              <label><span class="field-label">β_mileage_10k</span><input type="number" id="bMileage" step="10" value="-650"></label>
+              <label><span class="field-label">β_accident</span><input type="number" id="bAccident" step="10" value="-1800"></label>
+              <label><span class="field-label">β_condition</span><input type="number" id="bCondition" step="10" value="950"></label>
+              <label><span class="field-label">β_brandPremium</span><input type="number" id="bBrand" step="0.1" value="1"></label>
+              <label><span class="field-label">β_trimPremium</span><input type="number" id="bTrim" step="0.1" value="1"></label>
+              <label><span class="field-label" data-i18n="minClampLabel">Clamp min price ($)</span><input type="number" id="minPriceLinear" step="100" value="3000"></label>
+            </div>
+
+            <div class="form-grid cubic-coefs hidden">
+              <label><span class="field-label">β0 intercept</span><input type="number" id="c0" step="100" value="22000"></label>
+              <label><span class="field-label">β1 (x)</span><input type="number" id="c1" step="10" value="-1200"></label>
+              <label><span class="field-label">β2 (x²)</span><input type="number" id="c2" step="1" value="35"></label>
+              <label><span class="field-label">β3 (x³)</span><input type="number" id="c3" step="0.1" value="-1.2"></label>
+              <label><span class="field-label" data-i18n="minClampLabel">Clamp min price ($)</span><input type="number" id="minPriceCubic" step="100" value="3000"></label>
+            </div>
+
+            <div class="tip-box">
+              <strong data-i18n="tipTitle">Tip:</strong>
+              <span data-i18n="tipCopy">Cubic mode can overshoot with noisy data. Use it for comparison and teaching, not as a production pricing engine.</span>
+            </div>
+          </div>
+
+          <aside class="card result-card">
+            <div class="mini-label" data-i18n="resultLabel">Result</div>
+            <div class="result-price" id="resultPrice">$18,450</div>
+            <div class="result-range" id="resultRange">Reference range: $17,200 – $19,700</div>
+            <p class="result-explainer" id="resultExplainer"></p>
+            <div class="badge-row">
+              <span class="pill" id="resultModePill">Linear</span>
+              <span class="pill" data-i18n="educationalPill">Educational demo only</span>
+            </div>
+
+            <div class="contrib-head">
+              <h3 data-i18n="breakdownTitle">Contribution breakdown</h3>
+              <p data-i18n="breakdownCopy">Negative terms reduce the estimate. Positive terms support it.</p>
+            </div>
+            <div id="contribTableWrap"></div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="section">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow" data-i18n="howEyebrow">How it works</span>
+          <h2 data-i18n="howTitle">A simple model-to-interface workflow</h2>
+          <p data-i18n="howCopy">The website does not train a model online. It reads prepared coefficients, accepts user inputs, and computes an estimate directly in the browser.</p>
+        </div>
+        <div class="timeline-grid">
+          <article class="card timeline-card"><span class="step">01</span><h3 data-i18n="howStep1Title">Data and preprocessing</h3><p data-i18n="howStep1Copy">The original project cleaned real used-car data, reduced outliers, and prepared variables for regression analysis.</p></article>
+          <article class="card timeline-card"><span class="step">02</span><h3 data-i18n="howStep2Title">Regression model</h3><p data-i18n="howStep2Copy">A linear model was built as the baseline, and a cubic model was explored for comparison.</p></article>
+          <article class="card timeline-card"><span class="step">03</span><h3 data-i18n="howStep3Title">Interactive estimator</h3><p data-i18n="howStep3Copy">The web interface turns the model into a visible tool that users can test, compare, and discuss.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="market" class="section section-alt">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow" data-i18n="marketEyebrow">Learn the market</span>
+          <h2 data-i18n="marketTitle">Why these inputs matter</h2>
+          <p data-i18n="marketCopy">This section helps users — especially students and Chinese readers learning about the U.S. market — understand common used-car pricing logic.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="card feature-card"><h3 data-i18n="market1Title">Mileage</h3><p data-i18n="market1Copy">Higher mileage often means more wear and longer usage history, which usually reduces resale value.</p></article>
+          <article class="card feature-card"><h3 data-i18n="market2Title">Vehicle age</h3><p data-i18n="market2Copy">Older vehicles generally lose value because of depreciation, aging components, and changing buyer preference.</p></article>
+          <article class="card feature-card"><h3 data-i18n="market3Title">Condition</h3><p data-i18n="market3Copy">Cars in better condition often receive higher estimates because they may require fewer repairs.</p></article>
+          <article class="card feature-card"><h3 data-i18n="market4Title">Brand and trim</h3><p data-i18n="market4Copy">Some brands and trims hold value better because of reliability, features, and buyer demand.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="about" class="section">
+      <div class="container about-grid">
+        <div>
+          <div class="section-head left-tight">
+            <span class="eyebrow" data-i18n="aboutEyebrow">About this project</span>
+            <h2 data-i18n="aboutTitle">A complete high-school-style research and web demo project</h2>
+          </div>
+          <p data-i18n="aboutCopy1">This site was upgraded from an existing single-file estimator into a more complete project website with bilingual support, preset vehicles, clearer results, and educational sections.</p>
+          <p data-i18n="aboutCopy2">It is still intentionally lightweight: static HTML, CSS, and JavaScript, easy to deploy on GitHub Pages, and realistic for a student-built project.</p>
+        </div>
+        <div class="card checklist-card">
+          <div class="mini-label" data-i18n="aboutListLabel">What this version adds</div>
+          <ul>
+            <li data-i18n="aboutList1">Bilingual English-Chinese interface</li>
+            <li data-i18n="aboutList2">Hero section and clearer project positioning</li>
+            <li data-i18n="aboutList3">Preset example vehicles for quick demos</li>
+            <li data-i18n="aboutList4">Reference price range and explanation text</li>
+            <li data-i18n="aboutList5">How It Works, Learn the Market, and About sections</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-wrap">
+      <div>
+        <div class="footer-title">Used Car Value Lab</div>
+        <div class="footer-copy" data-i18n="footerCopy">Educational demo only. This site is for learning, demonstration, and general reference. It is not an official vehicle appraisal service.</div>
+      </div>
+      <a href="#top" class="footer-link" data-i18n="backTop">Back to top</a>
     </div>
-  </div>
-</div>
+  </footer>
 
-<script>
-  const $ = (id) => document.getElementById(id);
-
-  function num(v) {
-    const x = Number(v);
-    return Number.isFinite(x) ? x : 0;
-  }
-
-  function fmtMoney(x) {
-    const v = Math.round(x);
-    return v.toLocaleString("en-US");
-  }
-
-  function setModeUI(mode) {
-    const isLinear = mode === "linear";
-    $("linearInputs").style.display = isLinear ? "" : "none";
-    $("linearCoefs").style.display  = isLinear ? "" : "none";
-    $("cubicInputs").style.display  = isLinear ? "none" : "";
-    $("cubicCoefs").style.display   = isLinear ? "none" : "";
-    compute();
-  }
-
-  function linearPredict() {
-    const age = num($("age").value);
-    const mileage = num($("mileage").value);
-    const mileage_10k = mileage / 10000.0;
-    const accident = num($("accident").value);
-    const condition = num($("condition").value);
-    const brandPremium = num($("brandPremium").value);
-    const trimPremium = num($("trimPremium").value);
-
-    const b0 = num($("b0").value);
-    const bAge = num($("bAge").value);
-    const bMil10k = num($("bMil10k").value);
-    const bAcc = num($("bAcc").value);
-    const bCond = num($("bCond").value);
-    const bBrand = num($("bBrand").value);
-    const bTrim = num($("bTrim").value);
-    const minPrice = num($("minPrice").value);
-
-    const terms = [
-      { name: "intercept", value: 1, coef: b0 },
-      { name: "age_years", value: age, coef: bAge },
-      { name: "mileage_10k", value: mileage_10k, coef: bMil10k },
-      { name: "accident", value: accident, coef: bAcc },
-      { name: "condition", value: condition, coef: bCond },
-      { name: "brandPremium_$", value: brandPremium, coef: bBrand },
-      { name: "trimPremium_$", value: trimPremium, coef: bTrim },
-    ];
-
-    let price = 0;
-    for (const t of terms) price += t.value * t.coef;
-    price = Math.max(price, minPrice);
-
-    const formula = `Price = β0 + β_age·age + β_mileage·(mileage/10k) + β_acc·acc + β_cond·cond + β_brand·brandPremium + β_trim·trimPremium`;
-
-    const notes = `mileage_10k = ${mileage_10k.toFixed(3)} (from ${fmtMoney(mileage)} miles)`;
-
-    return { price, terms, formula, notes };
-  }
-
-  function cubicPredict() {
-    const xChoice = $("xChoice").value;
-    const x = num($("xValue").value);
-
-    const c0 = num($("c0").value);
-    const c1 = num($("c1").value);
-    const c2 = num($("c2").value);
-    const c3 = num($("c3").value);
-    const minPrice = num($("cMinPrice").value);
-
-    const terms = [
-      { name: "intercept", value: 1, coef: c0 },
-      { name: `${xChoice}: x`, value: x, coef: c1 },
-      { name: `${xChoice}: x^2`, value: x*x, coef: c2 },
-      { name: `${xChoice}: x^3`, value: x*x*x, coef: c3 },
-    ];
-
-    let price = 0;
-    for (const t of terms) price += t.value * t.coef;
-    price = Math.max(price, minPrice);
-
-    const formula = `Price = β0 + β1·x + β2·x² + β3·x³   (x = ${xChoice})`;
-    const notes = `Cubic models can overshoot for large x; keep x in a reasonable scale (e.g., mileage in 10k units).`;
-
-    return { price, terms, formula, notes };
-  }
-
-  function renderBreakdown(terms) {
-    const tbody = $("breakdownBody");
-    tbody.innerHTML = "";
-    for (const t of terms) {
-      const contrib = t.value * t.coef;
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${t.name}</td>
-        <td class="right">${Number.isFinite(t.value) ? t.value.toFixed(3) : "—"}</td>
-        <td class="right">${Number.isFinite(t.coef) ? t.coef.toFixed(3) : "—"}</td>
-        <td class="right">${fmtMoney(contrib)}</td>
-      `;
-      tbody.appendChild(tr);
-    }
-  }
-
-  function compute() {
-    const mode = $("mode").value;
-    const out = mode === "linear" ? linearPredict() : cubicPredict();
-
-    $("priceOut").textContent = "$ " + fmtMoney(out.price);
-    $("formulaOut").textContent = out.formula;
-    $("notes").textContent = out.notes;
-
-    renderBreakdown(out.terms);
-  }
-
-  function currentState() {
-    // Export/import everything needed to reproduce state
-    const ids = [
-      "mode",
-      "age","mileage","accident","condition","brandPremium","trimPremium",
-      "b0","bAge","bMil10k","bAcc","bCond","bBrand","bTrim","minPrice",
-      "xChoice","xValue",
-      "c0","c1","c2","c3","cMinPrice"
-    ];
-    const s = {};
-    for (const id of ids) {
-      const el = $(id);
-      if (el) s[id] = el.value;
-    }
-    return s;
-  }
-
-  function applyState(s) {
-    for (const [id, v] of Object.entries(s || {})) {
-      const el = $(id);
-      if (el) el.value = v;
-    }
-    setModeUI($("mode").value);
-    compute();
-  }
-
-  // events
-  $("mode").addEventListener("change", (e) => setModeUI(e.target.value));
-
-  document.addEventListener("input", (e) => {
-    // Any input updates the result
-    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT")) compute();
-  });
-
-  $("loadDemo").addEventListener("click", () => {
-    // A demo setup: feel free to tweak
-    applyState({
-      mode: "linear",
-      age: "4",
-      mileage: "52000",
-      accident: "0",
-      condition: "4",
-      brandPremium: "800",
-      trimPremium: "600",
-      b0: "24000",
-      bAge: "-1300",
-      bMil10k: "-600",
-      bAcc: "-2200",
-      bCond: "650",
-      bBrand: "1",
-      bTrim: "1",
-      minPrice: "0",
-      xChoice: "age",
-      xValue: "4",
-      c0: "24000",
-      c1: "-3500",
-      c2: "250",
-      c3: "-7",
-      cMinPrice: "0",
-    });
-  });
-
-  $("resetAll").addEventListener("click", () => {
-    location.reload();
-  });
-
-  $("exportJson").addEventListener("click", async () => {
-    const s = currentState();
-    const text = JSON.stringify(s, null, 2);
-    await navigator.clipboard.writeText(text);
-    alert("Exported state JSON to clipboard.");
-  });
-
-  $("importJson").addEventListener("click", () => {
-    const text = prompt("Paste state JSON here:");
-    if (!text) return;
-    try {
-      const s = JSON.parse(text);
-      applyState(s);
-    } catch (err) {
-      alert("Invalid JSON.");
-    }
-  });
-
-  // init
-  setModeUI($("mode").value);
-  compute();
-</script>
+  <script src="script.js"></script>
 </body>
 </html>
