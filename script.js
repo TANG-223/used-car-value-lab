@@ -47,7 +47,7 @@ const translations = {
     explainC: 'This estimate should be viewed as an educational reference rather than an official market appraisal.'
   },
   zh: {
-    brandSub: '面向美国市场的学生自建估值工具',
+    brandSub: '美国二手车价值评估与市场学习工具',
     navEstimator: '估值器', navHow: '工作原理', navMarket: '市场学习', navAbout: '关于项目',
     heroEyebrow: '可解释 · 轻量化 · 教育型',
     heroTitle: '更清晰地理解二手车价格',
